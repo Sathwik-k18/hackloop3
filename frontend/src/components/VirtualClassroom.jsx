@@ -3,7 +3,7 @@ import { Mic, MicOff, Video, VideoOff, PhoneOff, Send, Share2, MessageSquare, X 
 import Webcam from 'react-webcam';
 import io from 'socket.io-client';
 
-const SOCKET_SERVER =process.env.SOCKET_SERVER || 'http://localhost:5000';
+const SOCKET_SERVER =process.env.SOCKET_SERVER ;
 
 export default function VideoConferenceApp() {
   const [roomId, setRoomId] = useState('');
