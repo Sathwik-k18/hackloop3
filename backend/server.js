@@ -1,3 +1,6 @@
+// Load environment variables from .env file
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -7,14 +10,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ Single BASE_URL variable
+const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
+const PORT = process.env.PORT || 5000;
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // ✅ Allow all origins
+    origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
   }
 });
-
 
 // Store rooms and participants
 const rooms = new Map();
@@ -22,16 +29,15 @@ const rooms = new Map();
 io.on('connection', (socket) => {
   console.log(`[CONNECT] User connected: ${socket.id}`);
 
-  // Join room
   socket.on('join-room', ({ roomId, userName }) => {
     console.log(`[JOIN] ${userName} (${socket.id}) joining room: ${roomId}`);
     socket.join(roomId);
-    
+
     if (!rooms.has(roomId)) {
       rooms.set(roomId, new Map());
       console.log(`[ROOM CREATED] Room ${roomId} initialized.`);
     }
-    
+
     const room = rooms.get(roomId);
     room.set(socket.id, {
       id: socket.id,
@@ -40,11 +46,8 @@ io.on('connection', (socket) => {
       isMicOn: true
     });
 
-    // Send existing participants to new user
     const participants = Array.from(room.values());
     socket.emit('existing-participants', participants.filter(p => p.id !== socket.id));
-
-    // Notify others about new participant
     socket.to(roomId).emit('user-joined', {
       id: socket.id,
       name: userName,
@@ -71,15 +74,14 @@ io.on('connection', (socket) => {
     io.to(to).emit('ice-candidate', { from, candidate });
   });
 
-  // Chat messages
+  // Chat
   socket.on('send-message', ({ roomId, message }) => {
     console.log(`[CHAT] Message in ${roomId}:`, message);
     io.to(roomId).emit('receive-message', message);
   });
 
-  // Toggle camera/mic
+  // Camera / Mic toggles
   socket.on('toggle-camera', ({ roomId, isCameraOn }) => {
-    console.log(`[TOGGLE] ${socket.id} in ${roomId} toggled camera: ${isCameraOn}`);
     const room = rooms.get(roomId);
     if (room && room.has(socket.id)) {
       const user = room.get(socket.id);
@@ -89,7 +91,6 @@ io.on('connection', (socket) => {
   });
 
   socket.on('toggle-mic', ({ roomId, isMicOn }) => {
-    console.log(`[TOGGLE] ${socket.id} in ${roomId} toggled mic: ${isMicOn}`);
     const room = rooms.get(roomId);
     if (room && room.has(socket.id)) {
       const user = room.get(socket.id);
@@ -98,18 +99,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Leave room
-  socket.on('leave-room', (roomId) => {
-    console.log(`[LEAVE] ${socket.id} leaving room ${roomId}`);
-    handleUserLeave(socket, roomId);
-  });
-
+  // Leave room or disconnect
+  socket.on('leave-room', (roomId) => handleUserLeave(socket, roomId));
   socket.on('disconnect', () => {
-    console.log(`[DISCONNECT] User disconnected: ${socket.id}`);
+    console.log(`[DISCONNECT] ${socket.id}`);
     rooms.forEach((room, roomId) => {
-      if (room.has(socket.id)) {
-        handleUserLeave(socket, roomId);
-      }
+      if (room.has(socket.id)) handleUserLeave(socket, roomId);
     });
   });
 
@@ -118,12 +113,11 @@ io.on('connection', (socket) => {
     if (room) {
       const user = room.get(socket.id);
       room.delete(socket.id);
-      console.log(`[ROOM UPDATE] ${user?.name || socket.id} left room ${roomId}.`);
       socket.to(roomId).emit('user-left', { id: socket.id, name: user?.name });
-      
+
       if (room.size === 0) {
         rooms.delete(roomId);
-        console.log(`[ROOM CLEANUP] Room ${roomId} deleted (empty).`);
+        console.log(`[ROOM CLEANUP] Room ${roomId} deleted.`);
       } else {
         console.log(`[ROOM STATUS] Room ${roomId} now has ${room.size} participant(s).`);
       }
@@ -132,7 +126,6 @@ io.on('connection', (socket) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`[SERVER] Running on port ${PORT}`);
+  console.log(`[SERVER] Running at: ${BASE_URL}`);
 });
